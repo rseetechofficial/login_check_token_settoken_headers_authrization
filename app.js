@@ -1,58 +1,109 @@
-var createError = require('http-errors');
 var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
-
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
-var mongoose = require("mongoose");
 var app = express();
+var config = require('./config')
+var router = express.Router();
+var jwt = require('jsonwebtoken');
+var cors = require('cors')
+var bodyParser = require('body-parser');
+app.use(bodyParser.urlencoded({ extended: true }))
+app.use(bodyParser.json());
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
+//cors start
+var originsWhitelist = [
+    'http://localhost:4200', //this is front end url
+    'http://www.xyz.com' //production url
+    ];
+    var corsOptions = {
+    origin: function(origin, callback){
+    var isWhitelisted = originsWhitelist.indexOf(origin) !== -1;
+    callback(null, isWhitelisted);
+    },
+    credentials:true
+    }
+    app.use(cors(corsOptions));
+//cors end
 
-app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+var checkJWT = function (req, res, next) {
+    
+    console.log("==>inside jwt"+req.headers.token);
+    if(req.headers.token != undefined ){
+        console.log("token present");
+    jwt.verify(req.headers.token, config.secret, function (err, data) {
+        if (err) {
+            res.json({
+                status: false,
+                message: err
+            })
+        }
+        else {
+            req.user = data;
+            next();//move to next routing
+        }
 
-
-//mongodb connection start
-mongoose.connect("mongodb://localhost/expressGenerator", function(err){
-if(err){
-    console.log('The error is ',err)
+    })
 }
 else{
-console.log('The database connected')
+    console.log("token not present");
+    res.json({
+        status : false,
+        message : "Token not present"
+    })
 }
-})
-//mongodb connection end
+}
 
-app.use('/', indexRouter);
-//app.use('/users', usersRouter);
+router.post('/login', function (req, res) {
+        if (req.body.email == "mohan@gmail.com" && req.body.pass == "12345") {
+            const user = {
+                name: "Mohan",
+                age: 21,
+                sal: 450,
+                department: "Data science"
+            }
 
-//users start
-var usersRouter = require('./routes/users')
-app.use('/users', usersRouter)
-//users end
+            var token = jwt.sign(user, config.secret);
+            res.json({
+                status: true,
+                token: token
+            })
+        }
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
-});
+    })
 
-// error handler
-app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+router.get('/products', checkJWT, function (req, res) {
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
-});
 
-module.exports = app;
+                    res.json({
+                        status: true,
+                        products: [
+                            {
+                                name: "Apple",
+                                cost: 450
+                            },
+                            {
+                                name: "Banana",
+                                cost: 500
+                            }
+                        ]
+                    })
+
+    })
+
+router.get('/categories',checkJWT, function (req, res) {
+        
+                    res.json({
+                        status: true,
+                        products: [
+                            {
+                                name: "Fruits"
+                            },
+                            {
+                                name: "Home Appliences"
+                            }
+                        ]
+                    })
+    })
+
+app.use('/api', router);
+    app.listen(config.port, function () {
+        console.log('The server running on port number ' + config.port)
+    })
